@@ -26,3 +26,7 @@ export const POST: APIRoute = async ({ request }) => {
         return new Response(JSON.stringify({ message: 'Sunucu Hatası' }), { status: 500 });
     }
 };
+
+export const GET: APIRoute = async (context) => {
+    return POST(context);
+};
