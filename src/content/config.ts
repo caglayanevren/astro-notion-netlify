@@ -1,8 +1,6 @@
 import { defineCollection, z } from 'astro:content';
-import { notionLoader } from 'notion-astro-loader';
-import { notionPageSchema, propertySchema, transformedPropertySchema } from 'notion-astro-loader/schemas';
-
-const defaultImageUrl = 'https://placehold.co/600x500.png'; // when image missing somehow
+import { notionLoader } from '@chlorinec-pkgs/notion-astro-loader';
+import { notionPageSchema, propertySchema, transformedPropertySchema } from '@chlorinec-pkgs/notion-astro-loader/schemas';
 
 const blog = defineCollection({
     loader: notionLoader({
@@ -24,16 +22,7 @@ const blog = defineCollection({
             Date: transformedPropertySchema.date,
             Status: transformedPropertySchema.select,
             Summary: transformedPropertySchema.rich_text,
-            Cover: propertySchema.files.transform((files) => {
-                const firstFile = files.files[0];
-                if (!firstFile) return defaultImageUrl;
-                if (firstFile.type === 'file') {
-                    return firstFile.file.url;
-                } else if (firstFile.type === 'external') {
-                    return firstFile.external.url;
-                }
-                return defaultImageUrl;
-            }),
+            Image: propertySchema.files,
 
             // Converts to a Notion API created_time object
             //Created: propertySchema.created_time.optional(),

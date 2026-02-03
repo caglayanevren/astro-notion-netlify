@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@astrojs/netlify": "^6.6.4",
-    "astro": "^5.17.1",
-    "notion-astro-loader": "^0.4.0"
+    "@chlorinec-pkgs/notion-astro-loader": "^1.1.2",
+    "astro": "^5.17.1"
   }
 }

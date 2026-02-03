@@ -3,22 +3,23 @@ export const prerender = true;
 
 import { getCollection, render } from 'astro:content';
 import  Layout from "@layouts/Layout.astro";
+import { getNotionPosts } from '@utils/notion';
 
 export async function getStaticPaths() {
-  const posts = await getCollection('blog');
+  const posts = await getNotionPosts();
   return posts.map(post => ({
-    params: { slug: post.data.properties.Slug },
+    params: { slug: post.data.Slug },
     props: { post },
   }));
 }
 
 const { post } = Astro.props;
 // İçeriği HTML olarak render et
-const { Content } = await render(post);
+const { Content } = post.rendered;
 ---
 <Layout>
     <article>
-      <h1>{post.data.properties.Name}</h1>
+      <h1>{post.data.Name}</h1>
       <div class="blog-content">
         <Content />
       </div>

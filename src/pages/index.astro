@@ -1,12 +1,18 @@
 ---
 import { getCollection } from 'astro:content';
 import  Layout from "@layouts/Layout.astro";
+import { getNotionPosts, type BlogPostDataType } from '@utils/notion';
 
+const allPosts = await getNotionPosts();
 // Sadece 'Published' olanları çek ve tarihe göre sırala
-const allPosts = await getCollection('blog', ({ data }) => {
-  return data.properties.Status === 'Published';
-});
-const sortedPosts = allPosts.sort((a, b) => (b.data.properties.Date?.start?.valueOf() ?? 0) - (a.data.properties.Date?.start?.valueOf() ?? 0));
+const filteredPosts = allPosts.filter(post => post.data.Status === 'Published');
+const sortedPosts = filteredPosts.sort((a: { data: BlogPostDataType }, b: { data: BlogPostDataType }) => {
+	const dateA = a.data.Date;
+	const dateB = b.data.Date;
+	if(dateA && dateB) 
+	return dateA > dateB ? -1 : 1;
+	return 0;
+  });
 ---
 <Layout>
 	<h1>Blog Yazıları</h1>
@@ -14,11 +20,11 @@ const sortedPosts = allPosts.sort((a, b) => (b.data.properties.Date?.start?.valu
 	  {sortedPosts.map(post => (
 		<li>
 			<div style="display: flex;">
-				<div><img src={`${post.data.properties.Cover}`} alt={`${post.data.properties.Name}`} /></div>
-				<a href={`/blog/${post.data.properties.Slug}`}>
-					<h2>{post.data.properties.Name}</h2>
-					<p>{post.data.properties.Summary}</p>
-					<time>{post.data.properties.Date?.start?.toLocaleDateString()}</time>
+				<div><img src={`${post.data.Image}`} alt={`${post.data.Name}`} /></div>
+				<a href={`/blog/${post.data.Slug}`}>
+					<h2>{post.data.Name}</h2>
+					<p>{post.data.Summary}</p>
+					<time>{post.data.Date?.start?.toLocaleDateString()}</time>
 				</a>
 			</div>
 		</li>
