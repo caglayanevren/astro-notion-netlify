@@ -1,7 +1,8 @@
 import { dateToDateObjects, richTextToPlainText, fileToUrl, fileToImageAsset } from '@chlorinec-pkgs/notion-astro-loader';
-//import type { GetImageResult } from 'astro';
 import { getCollection, render } from 'astro:content';
 import type { RenderResult } from 'astro:content';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 
 export type BlogPostDataType = {
     Name: string;
@@ -25,6 +26,42 @@ export type PostsType = {
 
 let _posts: PostsType[] | null = null;
 
+function getStableNotionFileKey(url: string): string {
+    const u = new URL(url);
+    const path = u.pathname;
+    // /secure.notion-static.com/UUID/filename.png
+
+    return path.replace(/^\//, '').replace(/\//g, '_').replace('.jpg','');
+}
+
+async function downloadNotionImageToAssets(url: string, slug: string): Promise<string> {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to download image: ${url}`);
+
+    const buffer = Buffer.from(await res.arrayBuffer());
+
+    const ext = path.extname(new URL(url).pathname) || '.jpg';
+
+    const stableKey = getStableNotionFileKey(url);
+
+    // ✅ deterministic filename
+    const fileName = `${slug}-${stableKey}${ext}`;
+
+    const assetsDir = path.resolve(process.cwd(), 'src/assets/notion');
+    await fs.mkdir(assetsDir, { recursive: true });
+
+    const filePath = path.join(assetsDir, fileName);
+
+    // ✅ cache: varsa tekrar indirme
+    try {
+        await fs.access(filePath);
+        return `/src/assets/notion/${fileName}`;
+    } catch {
+        await fs.writeFile(filePath, buffer);
+        return `/src/assets/notion/${fileName}`;
+    }
+} 
+
 export type NotionPostItem = Awaited<ReturnType<typeof getCollection<'blog'>>>[number];
 
 export async function getNotionPostData(post: NotionPostItem): Promise<BlogPostDataType> {
@@ -35,7 +72,7 @@ export async function getNotionPostData(post: NotionPostItem): Promise<BlogPostD
         Date: properties.Date ? dateToDateObjects({ start: properties.Date.start.toISOString(), end: properties.Date.end?.toISOString() || null, time_zone: properties.Date.time_zone }) : null,
         Status: properties.Status,
         Summary: properties.Summary,
-        Image: properties.Image && properties.Image.files.length > 0 ? (await fileToImageAsset(properties.Image.files[0])).src : undefined,
+        Image: properties.Image && properties.Image.files.length > 0 ? await downloadNotionImageToAssets(properties.Image.files[0].type === 'file' ? properties.Image.files[0].file.url : properties.Image.files[0].external.url, properties.Slug) : undefined,
     };
 }
 

@@ -7,12 +7,12 @@ const blog = defineCollection({
         auth: import.meta.env.NOTION_TOKEN,
         database_id: import.meta.env.NOTION_DATABASE_ID,
         // Use Notion sorting and filtering
-        //filter: {
-        //    property: 'Status',
-        //    select: {
-        //        equals: 'Published',
-        //    },
-        //},
+        filter: {
+            property: 'Status',
+            select: {
+                equals: 'Published',
+            },
+        },
     }),
     schema: notionPageSchema({
         properties: z.object({
