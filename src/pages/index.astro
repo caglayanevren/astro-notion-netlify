@@ -1,18 +1,22 @@
 ---
+export const prerender = true;
+
 import { Image } from 'astro:assets';
 import  Layout from "@layouts/Layout.astro";
-import { getNotionPosts, type BlogPostDataType } from '@utils/notion';
+import { getNotionPosts } from '@utils/notion';
+import { type BlogPostDataType } from '../config';
 
 const allPosts = await getNotionPosts();
 // Sadece 'Published' olanları çek ve tarihe göre sırala
 //const filteredPosts = allPosts.filter(post => post.data.Status === 'Published');
-const sortedPosts = allPosts.sort((a: { data: BlogPostDataType }, b: { data: BlogPostDataType }) => {
+  const sortedPosts = allPosts.sort((a: { data: BlogPostDataType }, b: { data: BlogPostDataType }) => {
 	const dateA = a.data.Date;
 	const dateB = b.data.Date;
 	if(dateA && dateB) 
-	return dateA > dateB ? 1 : -1;
+	return dateA > dateB ? -1 : 1;
 	return 0;
   });
+
 ---
 <Layout>
 	<h1>Blog Yazıları</h1>
@@ -20,7 +24,7 @@ const sortedPosts = allPosts.sort((a: { data: BlogPostDataType }, b: { data: Blo
 	  {sortedPosts.map(post => (
 		<li>
 			<div style="display: flex;">
-				<div style="height: 150px;padding-inline:10px"><Image src={`${post.data.Image}`} width={198} height={238} alt={`${post.data.Name}`} style={'height:100%;width:auto;'} /></div>
+				<div style="height: 150px;padding-inline:10px">{post.data.Image && <Image src={post.data.Image} width={198} height={238} alt={post.data.Name} style={'height:100%;width:auto;'} />}</div>
 				<a href={`/blog/${post.data.Slug}`}>
 					<h2>{post.data.Name}</h2>
 					<p>{post.data.Summary}</p>
