@@ -2,6 +2,7 @@
 export const prerender = true;
 
 import  Layout from "@layouts/Layout.astro";
+import ImageWrapper from "@components/ImageWrapper.astro";
 import { getNotionPosts } from '@utils/notion';
 
 export async function getStaticPaths() {
@@ -22,5 +23,10 @@ const { Content } = post.rendered;
       <div class="blog-content">
         <Content />
       </div>
+{/*
+      <p>Post Image</p>
+      {post.data.Image && <ImageWrapper src={post.data.Image} alt={post.data.Name} />}
+*/}
+      
     </article>
 </Layout>

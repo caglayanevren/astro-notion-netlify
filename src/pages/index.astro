@@ -1,7 +1,7 @@
 ---
 export const prerender = true;
 
-import { Image } from 'astro:assets';
+import ImageWrapper  from '@components/ImageWrapper.astro';
 import  Layout from "@layouts/Layout.astro";
 import { getNotionPosts } from '@utils/notion';
 import { type BlogPostDataType } from '../config';
@@ -24,7 +24,7 @@ const allPosts = await getNotionPosts();
 	  {sortedPosts.map(post => (
 		<li>
 			<div style="display: flex;">
-				<div style="height: 150px;padding-inline:10px">{post.data.Image && <Image src={post.data.Image} width={198} height={238} alt={post.data.Name} style={'height:100%;width:auto;'} />}</div>
+				<div style="height: 280px;padding-inline:10px">{post.data.Image && <ImageWrapper src={post.data.Image} alt={post.data.Name} />}</div>
 				<a href={`/blog/${post.data.Slug}`}>
 					<h2>{post.data.Name}</h2>
 					<p>{post.data.Summary}</p>

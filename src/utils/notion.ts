@@ -44,13 +44,18 @@ async function downloadNotionImageToAssets(url: string, slug: string): Promise<s
 
 export async function getNotionPostData(post: NotionPostItem): Promise<BlogPostDataType> {
     const { properties, cover } = post.data;
+    //console.log("properties.Image: ", properties.Image.files[0].file.expiry_time)
     return {
         Name: properties.Name,
         Slug: properties.Slug,
         Date: properties.Date ? dateToDateObjects({ start: properties.Date.start.toISOString(), end: properties.Date.end?.toISOString() || null, time_zone: properties.Date.time_zone }) : null,
         Status: properties.Status,
         Summary: properties.Summary,
-        Image: properties.Image && properties.Image.files.length > 0 ? await downloadNotionImageToAssets(properties.Image.files[0].type === 'file' ? properties.Image.files[0].file.url : properties.Image.files[0].external.url, properties.Slug) : undefined,
+        Image: properties.Image && properties.Image.files.length > 0 
+            ? await downloadNotionImageToAssets(properties.Image.files[0].type === 'file' 
+                                                    ? properties.Image.files[0].file.url 
+                                                    : properties.Image.files[0].external.url, properties.Slug) 
+            : undefined,
     };
 }
 
