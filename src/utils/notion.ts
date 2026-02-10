@@ -35,10 +35,10 @@ async function downloadNotionImageToAssets(url: string, slug: string): Promise<s
     // ✅ cache: varsa tekrar indirme
     try {
         await fs.access(filePath);
-        return `${imageSavePath}/${fileName}`;
+        return `/src/${imageSavePath}/${fileName}`;
     } catch {
         await fs.writeFile(filePath, buffer);
-        return `${imageSavePath}/${fileName}`;
+        return `/src/${imageSavePath}/${fileName}`;
     }
 }
 
