@@ -86,7 +86,7 @@ async function getFreshNotionImageUrl(pageId: string): Promise<string> {
     return getFileUrl(getImageFileFromPage(page));
 }
 
-async function fetchNotionImageWithFreshUrl(pageId: string, cacheKey: string): Promise<{ buffer: Buffer; url: string }> {
+async function fetchNotionImageWithFreshUrl(pageId: string, cacheKey: string): Promise<Buffer> {
     let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -94,10 +94,7 @@ async function fetchNotionImageWithFreshUrl(pageId: string, cacheKey: string): P
         const res = await fetch(freshUrl);
 
         if (res.ok) {
-            return {
-                buffer: Buffer.from(await res.arrayBuffer()),
-                url: freshUrl,
-            };
+            return Buffer.from(await res.arrayBuffer());
         }
 
         const body = await res.text().catch(() => '');
@@ -159,7 +156,7 @@ async function downloadNotionImageToAssets(url: string, slug: string, pageId: st
         }
     }
 
-    const { buffer, url: freshUrl } = await fetchNotionImageWithFreshUrl(pageId, cacheKey);
+    const buffer = await fetchNotionImageWithFreshUrl(pageId, cacheKey);
     await fs.writeFile(filePath, buffer);
 
     if (_notionImagesStore) {
@@ -168,13 +165,9 @@ async function downloadNotionImageToAssets(url: string, slug: string, pageId: st
         const blobData = new ArrayBuffer(buffer.byteLength);
         new Uint8Array(blobData).set(buffer);
 
-        await _notionImagesStore.set(cacheKey, blobData, {
-            metadata: {
-                pageId,
-                lastEditedTime,
-                sourceUrl: freshUrl,
-            },
-        });
+        // Cache invalidation is encoded entirely in cacheKey. Do not put the
+        // expiring presigned URL or other variable data in Blob metadata.
+        await _notionImagesStore.set(cacheKey, blobData);
     }
 
     return assetPath;
