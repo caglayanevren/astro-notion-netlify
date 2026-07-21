@@ -30,6 +30,8 @@ const blog = defineCollection({
             // Converts to a Notion API created_time object
             //Created: propertySchema.created_time.optional(),
         }),
+    }).extend({
+        last_edited_time: z.string(),
     }),
 });
 
