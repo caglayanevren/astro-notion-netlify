@@ -32,6 +32,6 @@ export default defineConfig({
                 hostname: '**.amazonaws.com',
             },
         ],
-        domains: ['prod-files-secure.s3.us-west-2.amazonaws.com'],
+        domains: ["prod-files-secure.s3.us-west-2.amazonaws.com", "www.notion.so"],
     },
 });
