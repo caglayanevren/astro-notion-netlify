@@ -8,15 +8,14 @@ import { type BlogPostDataType } from '../config';
 
 const allPosts = await getNotionPosts();
 // Sadece 'Published' olanları çek ve tarihe göre sırala
-//const filteredPosts = allPosts.filter(post => post.data.Status === 'Published');
-  const sortedPosts = allPosts.sort((a: { data: BlogPostDataType }, b: { data: BlogPostDataType }) => {
+const filteredPosts = allPosts.filter(post => post.data.Status === 'Published');
+  const sortedPosts = filteredPosts.sort((a: { data: BlogPostDataType }, b: { data: BlogPostDataType }) => {
 	const dateA = a.data.Date;
 	const dateB = b.data.Date;
 	if(dateA && dateB) 
 	return dateA > dateB ? -1 : 1;
 	return 0;
   });
-
 ---
 <Layout>
 	<h1>Blog Yazıları</h1>
@@ -24,7 +23,7 @@ const allPosts = await getNotionPosts();
 	  {sortedPosts.map(post => (
 		<li>
 			<div style="display: flex;">
-				<div style="height: 280px;padding-inline:10px">{post.data.Image && <ImageWrapper src={post.data.Image} alt={post.data.Name} />}</div>
+				<div style="height: auto;padding-inline:10px">{post.data.Image && <ImageWrapper filename={post.data.Image} alt={post.data.Name} />}</div>
 				<a href={`/blog/${post.data.Slug}`}>
 					<h2>{post.data.Name}</h2>
 					<p>{post.data.Summary}</p>

@@ -16,9 +16,9 @@ export default defineConfig({
     //        external: ['fs', 'path', 'fs-extra'],
     //    },
     //},
-    experimental: {
-        failOnPrerenderConflict: true,
-    },
+    //experimental: {
+    //    failOnPrerenderConflict: true,
+    //},
     image: {
         service: {
             entrypoint: 'astro/assets/services/sharp',

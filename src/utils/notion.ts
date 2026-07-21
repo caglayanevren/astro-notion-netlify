@@ -8,37 +8,42 @@ let _posts: PostsType[] | null = null;
 
 function getStableNotionFileKey(url: string): string {
     const u = new URL(url);
-    const path = u.pathname;
+    const parsedPath = path.parse(u.pathname);
+    const pathWithoutExt = path.join(parsedPath.dir, parsedPath.name);
     // /secure.notion-static.com/UUID/filename.png
 
-    return path.replace(/^\//, '').replace(/\//g, '_').replace('.jpg', '');
+    return pathWithoutExt.replace(/^\//, '').replace(/\//g, '_');
 }
 
 async function downloadNotionImageToAssets(url: string, slug: string): Promise<string> {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Failed to download image: ${url}`);
-
-    const buffer = Buffer.from(await res.arrayBuffer());
-
     const ext = path.extname(new URL(url).pathname) || '.jpg';
 
     const stableKey = getStableNotionFileKey(url);
 
-    // ✅ deterministic filename
+    // Deterministic filename keeps expired Notion URLs from breaking cached images.
     const fileName = `${slug}-${stableKey}${ext}`;
 
     const assetsDir = path.resolve(process.cwd(), `src/${imageSavePath}`);
     await fs.mkdir(assetsDir, { recursive: true });
 
     const filePath = path.join(assetsDir, fileName);
+    const assetPath = `/src/${imageSavePath}/${fileName}`;
 
-    // ✅ cache: varsa tekrar indirme
     try {
         await fs.access(filePath);
-        return `/src/${imageSavePath}/${fileName}`;
+        return assetPath;
     } catch {
+        const res = await fetch(url);
+        if (!res.ok) {
+            const body = await res.text().catch(() => '');
+            throw new Error(
+                `Failed to download image (${res.status} ${res.statusText}): ${url}\n${body.slice(0, 300)}`,
+            );
+        }
+
+        const buffer = Buffer.from(await res.arrayBuffer());
         await fs.writeFile(filePath, buffer);
-        return `/src/${imageSavePath}/${fileName}`;
+        return assetPath;
     }
 }
 
