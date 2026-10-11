@@ -5,8 +5,9 @@
     "scripts": {
         "clear": "rm -rf dist .astro .netlify node_modules",
         "clean": "rm -rf dist .astro .netlify",
-        "dev": "astro dev",
+        "dev": "npm run sync:notion-images && astro dev",
         "sync:notion-images": "node scripts/sync-notion-images.mjs",
+        "prune:notion-images": "node scripts/sync-notion-images.mjs --prune",
         "build": "npm run sync:notion-images && astro sync && astro build",
         "preview": "astro preview",
         "astro": "astro"

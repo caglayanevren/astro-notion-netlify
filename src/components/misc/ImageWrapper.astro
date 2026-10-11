@@ -1,5 +1,6 @@
 ---
 import { Image } from 'astro:assets';
+import { notionImageAssets } from '../../assets/notion-image-assets';
 
 interface Props {
   filename: string;        // örn: "post-1-cover.jpg" — content collection'dan gelir
@@ -19,28 +20,18 @@ const {
   loading = 'lazy',
 } = Astro.props;
 
-// KRİTİK: glob pattern'i STATİK bir string literal olmalı.
-// Vite bunu build-time'da analiz edip eşleşen tüm dosyaları önceden bundle eder.
-// `filename` değişkenini pattern'in İÇİNE koyamazsın (import.meta.glob(`...${filename}`) ÇALIŞMAZ).
-const images = import.meta.glob<{ default: ImageMetadata }>(
-  '/src/assets/notion/*.{jpg,jpeg,png,webp}',
-  { eager: true }
-);
-
 const key = `${filename}`;
-const match = images[key];
+const match = notionImageAssets[key as keyof typeof notionImageAssets];
 
 if (!match) {
   throw new Error(
-    `ImageWrapper: "${filename}" bulunamadı. Mevcut dosyalar: ${Object.keys(images)
-      .map((k) => k.split('/').pop())
-      .join(', ')}`
+    `ImageWrapper: the prepared asset "${filename}" is missing. Run sync:notion-images before building.`
   );
 }
 ---
 
 <Image
-  src={match.default}
+  src={match}
   alt={alt}
   widths={widths}
   sizes={sizes}

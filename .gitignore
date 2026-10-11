@@ -28,3 +28,9 @@ pnpm-debug.log*
 
 #src/assets/notion/**/*.jpg
 #src/assets/notion/*.jpg
+
+# Build-time Notion cover-image cache. The empty directory marker is tracked.
+src/assets/notion-generated/*
+!src/assets/notion-generated/.gitkeep
+src/assets/notion-image-manifest.json
+src/assets/notion-image-assets.ts
