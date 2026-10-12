@@ -4,6 +4,7 @@ import imageManifest from '../assets/notion-image-manifest.json';
 import { type PostsType, type BlogPostDataType, type NotionPostItem } from '../config';
 
 type NotionImageManifestEntry = {
+    kind?: 'cover' | 'body';
     key: string;
     pageId: string;
     lastEditedTime: string;
@@ -21,7 +22,9 @@ let postsPromise: Promise<PostsType[]> | undefined;
 
 const manifest = imageManifest as NotionImageManifest;
 const imagesByRevision = new Map(
-    manifest.images.map((image) => [`${image.pageId}:${image.lastEditedTime}`, image]),
+    manifest.images
+        .filter((image) => image.kind === 'cover')
+        .map((image) => [`${image.pageId}:${image.lastEditedTime}`, image]),
 );
 
 function getImageAssetPath(post: NotionPostItem): string | undefined {

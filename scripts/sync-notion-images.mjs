@@ -7,7 +7,8 @@ import { Client, isFullPage } from '@notionhq/client';
 const projectRoot = process.cwd();
 const assetsDirectory = path.resolve(projectRoot, 'src/assets/notion-generated');
 const manifestPath = path.resolve(projectRoot, 'src/assets/notion-image-manifest.json');
-const assetModulePath = path.resolve(projectRoot, 'src/assets/notion-image-assets.ts');
+const coverAssetModulePath = path.resolve(projectRoot, 'src/assets/notion-image-assets.ts');
+const bodyAssetModulePath = path.resolve(projectRoot, 'src/assets/notion-body-image-assets.ts');
 const storeName = 'notion-images';
 const concurrency = 4;
 const keepBlobVersions = 2;
@@ -32,25 +33,13 @@ function requiredEnvironment(name) {
   return value;
 }
 
-function imageKey(pageId, lastEditedTime) {
-  return `${pageId}:${lastEditedTime}`;
-}
-
 function safeFileSegment(value) {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_');
-}
-
-function blobKey(pageId, lastEditedTime) {
-  return `covers/${pageId}/${encodeURIComponent(lastEditedTime)}`;
 }
 
 function extensionFromUrl(url) {
   const ext = path.extname(new URL(url).pathname).toLowerCase();
   return ['.avif', '.gif', '.jpeg', '.jpg', '.png', '.webp'].includes(ext) ? ext : '.jpg';
-}
-
-function fileName(pageId, lastEditedTime, extension) {
-  return `${safeFileSegment(pageId)}-${safeFileSegment(lastEditedTime)}${extension}`;
 }
 
 function fileUrl(file) {
@@ -59,13 +48,58 @@ function fileUrl(file) {
   throw new Error('Notion image file does not contain a usable URL.');
 }
 
-function imageFileFromPage(page) {
-  if (!isFullPage(page)) throw new Error(`Notion page ${page.id} is not a full page.`);
-  const property = page.properties.Image;
-  if (!property || property.type !== 'files' || property.files.length === 0) {
-    throw new Error(`Notion page ${page.id} does not contain properties.Image.`);
+function normalizeSourceUrl(url) {
+  const parsed = new URL(url);
+  return `${parsed.origin}${parsed.pathname}`;
+}
+
+function imageKey(image) {
+  return image.kind === 'cover'
+    ? `cover:${image.pageId}:${image.lastEditedTime}`
+    : `body:${image.pageId}:${image.blockId}:${image.lastEditedTime}`;
+}
+
+function imageIdentity(image) {
+  return image.kind === 'cover'
+    ? `cover:${image.pageId}`
+    : `body:${image.pageId}:${image.blockId}`;
+}
+
+function blobKey(image) {
+  return image.kind === 'cover'
+    ? `covers/${image.pageId}/${encodeURIComponent(image.lastEditedTime)}`
+    : `body/${image.pageId}/${image.blockId}/${encodeURIComponent(image.lastEditedTime)}`;
+}
+
+function blobPrefix(image) {
+  return image.kind === 'cover'
+    ? `covers/${image.pageId}/`
+    : `body/${image.pageId}/${image.blockId}/`;
+}
+
+function bodyFileNameFromNotionUrl(url, image) {
+  if (image.sourceType === 'external') {
+    return path.join(
+      'body',
+      'external',
+      `${safeFileSegment(image.pageId)}-${safeFileSegment(image.blockId)}-${safeFileSegment(image.lastEditedTime)}${extensionFromUrl(url)}`,
+    );
   }
-  return property.files[0];
+
+  const parts = new URL(url).pathname.split('/').filter(Boolean);
+  const [parentId, objectId, fileName] = parts;
+  if (!parentId || !objectId || !fileName) {
+    throw new Error(`Unsupported Notion file URL for body image block ${image.blockId}.`);
+  }
+  return path.join('body', parentId, `${objectId}.${extensionFromUrl(url).slice(1)}`);
+}
+
+function fileNameFor(image) {
+  if (image.kind === 'body') return bodyFileNameFromNotionUrl(image.url, image);
+  return path.join(
+    'covers',
+    `${safeFileSegment(image.pageId)}-${safeFileSegment(image.lastEditedTime)}${extensionFromUrl(image.url)}`,
+  );
 }
 
 function isImageBuffer(buffer) {
@@ -83,10 +117,8 @@ function isImageBuffer(buffer) {
 function createStore() {
   const siteID = process.env.NETLIFY_SITE_ID || process.env.SITE_ID;
   const token = process.env.NETLIFY_AUTH_TOKEN || process.env.NETLIFY_API_TOKEN;
-
   if (siteID && token) return getStore({ name: storeName, siteID, token });
   if (process.env.NETLIFY_BLOBS_CONTEXT) return getStore(storeName);
-
   console.warn('Netlify Blobs credentials are unavailable; using Notion without a persistent image cache.');
   return null;
 }
@@ -112,7 +144,7 @@ async function fetchImage(url) {
     const response = await fetch(url, { signal: AbortSignal.timeout(20_000) });
     if (!response.ok) throw new Error(`Image download failed: ${response.status} ${response.statusText}`);
     const buffer = await response.arrayBuffer();
-    if (!isImageBuffer(buffer)) throw new Error('Downloaded cover is not a recognized image file.');
+    if (!isImageBuffer(buffer)) throw new Error('Downloaded Notion image is not a recognized image file.');
     return buffer;
   }, 'Notion image download');
 }
@@ -121,28 +153,92 @@ async function loadPreviousManifest() {
   try {
     return JSON.parse(await fs.readFile(manifestPath, 'utf8'));
   } catch (error) {
-    if (error.code === 'ENOENT') return { version: 1, images: [] };
+    if (error.code === 'ENOENT') return { version: 2, images: [] };
     throw error;
   }
 }
 
-async function getPublishedPages(client, databaseId) {
+async function resolveDataSourceId(client, databaseId) {
+  // İsterseniz doğrudan NOTION_DATA_SOURCE_ID env değişkeni tanımlayıp bu çağrıyı atlayabilirsiniz.
+  if (process.env.NOTION_DATA_SOURCE_ID) return process.env.NOTION_DATA_SOURCE_ID;
+
+  const database = await retry(
+    () => client.databases.retrieve({ database_id: databaseId }),
+    'Notion database retrieve',
+  );
+  const dataSources = database.data_sources ?? [];
+  if (dataSources.length === 0) {
+    throw new Error(`Database ${databaseId} has no accessible data sources.`);
+  }
+  if (dataSources.length > 1) {
+    console.warn(`Database has ${dataSources.length} data sources; using "${dataSources[0].name}". Set NOTION_DATA_SOURCE_ID to choose one.`);
+  }
+  return dataSources[0].id;
+}
+
+async function getPublishedPages(client, dataSourceId) {
   const pages = [];
   let startCursor;
   do {
-    const response = await retry(() => client.databases.query({
-      database_id: databaseId,
+    const response = await retry(() => client.dataSources.query({
+      data_source_id: dataSourceId,
       start_cursor: startCursor,
       filter: { property: 'Status', select: { equals: 'Published' } },
-    }), 'Notion database query');
-    pages.push(...response.results);
+    }), 'Notion data source query');
+    pages.push(...response.results.filter(isFullPage));
     startCursor = response.has_more ? response.next_cursor : undefined;
   } while (startCursor);
   return pages;
 }
+async function listBodyImages(client, pageId) {
+  const images = [];
+  async function visitChildren(blockId) {
+    let startCursor;
+    do {
+      const response = await retry(() => client.blocks.children.list({ block_id: blockId, start_cursor: startCursor }), `Notion blocks for ${blockId}`);
+      for (const block of response.results) {
+        if (block.type === 'image' && block.image) {
+          const url = fileUrl(block.image);
+          images.push({
+            kind: 'body',
+            pageId,
+            blockId: block.id,
+            lastEditedTime: block.last_edited_time,
+            sourceType: block.image.type,
+            url,
+            sourceUrlKey: normalizeSourceUrl(url),
+          });
+        }
+        if (block.has_children) await visitChildren(block.id);
+      }
+      startCursor = response.has_more ? response.next_cursor : undefined;
+    } while (startCursor);
+  }
+  await visitChildren(pageId);
+  return images;
+}
+
+async function getPageImages(client, page) {
+  const images = await listBodyImages(client, page.id);
+  const freshPage = await retry(() => client.pages.retrieve({ page_id: page.id }), `Notion page ${page.id}`);
+  if (isFullPage(freshPage) && freshPage.properties.Image?.type === 'files' && freshPage.properties.Image.files[0]) {
+    const cover = freshPage.properties.Image.files[0];
+    const url = fileUrl(cover);
+    images.unshift({
+      kind: 'cover',
+      pageId: page.id,
+      lastEditedTime: freshPage.last_edited_time,
+      sourceType: cover.type,
+      url,
+      sourceUrlKey: normalizeSourceUrl(url),
+    });
+  }
+  return images;
+}
 
 async function copyIfPresent(source, destination) {
   try {
+    await fs.mkdir(path.dirname(destination), { recursive: true });
     await fs.copyFile(source, destination);
     return true;
   } catch (error) {
@@ -151,28 +247,18 @@ async function copyIfPresent(source, destination) {
   }
 }
 
-async function syncPageImage({ client, store, page, previousByKey, stagingDirectory }) {
-  const revision = page.last_edited_time;
-  const key = imageKey(page.id, revision);
-  const listedImage = imageFileFromPage(page);
-  const extension = extensionFromUrl(fileUrl(listedImage));
-  const name = fileName(page.id, revision, extension);
-  const destination = path.join(stagingDirectory, name);
+async function syncImage({ image, store, previousByKey, stagingDirectory }) {
+  const key = imageKey(image);
+  const fileName = fileNameFor(image);
+  const destination = path.join(stagingDirectory, fileName);
   const previous = previousByKey.get(key);
 
   if (!previous?.stale && previous && await copyIfPresent(path.join(assetsDirectory, previous.fileName), destination)) {
-    return {
-      key,
-      pageId: page.id,
-      lastEditedTime: revision,
-      fileName: previous.fileName,
-      blobKey: previous.blobKey,
-      stale: false,
-    };
+    return { ...image, key, fileName: previous.fileName, blobKey: previous.blobKey, stale: false };
   }
 
+  const keyForBlob = blobKey(image);
   let buffer;
-  const keyForBlob = blobKey(page.id, revision);
   if (store) {
     try {
       buffer = await store.get(keyForBlob, { type: 'arrayBuffer' });
@@ -186,8 +272,7 @@ async function syncPageImage({ client, store, page, previousByKey, stagingDirect
   }
 
   if (!buffer) {
-    const freshPage = await retry(() => client.pages.retrieve({ page_id: page.id }), `Notion page ${page.id}`);
-    buffer = await fetchImage(fileUrl(imageFileFromPage(freshPage)));
+    buffer = await fetchImage(image.url);
     if (store) {
       try {
         await store.set(keyForBlob, buffer);
@@ -197,8 +282,9 @@ async function syncPageImage({ client, store, page, previousByKey, stagingDirect
     }
   }
 
+  await fs.mkdir(path.dirname(destination), { recursive: true });
   await fs.writeFile(destination, Buffer.from(buffer));
-  return { key, pageId: page.id, lastEditedTime: revision, fileName: name, blobKey: keyForBlob, stale: false };
+  return { ...image, key, fileName, blobKey: keyForBlob, stale: false };
 }
 
 async function mapWithConcurrency(items, limit, worker) {
@@ -230,21 +316,22 @@ async function replaceDirectory(stagingDirectory) {
   }
 }
 
-function renderAssetModule(images) {
+function renderAssetModule(images, exportName) {
   const imports = images
-    .map((image, index) => `import image${index} from './notion-generated/${image.fileName}';`)
+    .map((image, index) => `import image${index} from './notion-generated/${image.fileName.replaceAll('\\', '/')}';`)
     .join('\n');
   const entries = images
-    .map((image, index) => `  ${JSON.stringify(`/src/assets/notion-generated/${image.fileName}`)}: image${index},`)
+    .map((image, index) => `  ${JSON.stringify(`/src/assets/notion-generated/${image.fileName.replaceAll('\\', '/')}`)}: image${index},`)
     .join('\n');
-  return `${imports}\n\nexport const notionImageAssets = {\n${entries}\n} as const;\n`;
+  return `${imports}\n\nexport const ${exportName} = {\n${entries}\n} as const;\n`;
 }
 
 async function pruneOldBlobVersions(store, images, previousImages) {
   if (!store || !process.argv.includes('--prune')) return;
-  const pageIds = [...new Set([...images, ...previousImages].map((image) => image.pageId))];
-  for (const pageId of pageIds) {
-    const listed = await store.list({ prefix: `covers/${pageId}/` });
+  const imageByPrefix = new Map();
+  for (const image of [...images, ...previousImages]) imageByPrefix.set(blobPrefix(image), image);
+  for (const [prefix] of imageByPrefix) {
+    const listed = await store.list({ prefix });
     const stale = listed.blobs.map((blob) => blob.key).sort().reverse().slice(keepBlobVersions);
     await Promise.all(stale.map((key) => store.delete(key)));
   }
@@ -253,51 +340,60 @@ async function pruneOldBlobVersions(store, images, previousImages) {
 await loadLocalEnv();
 const client = new Client({ auth: requiredEnvironment('NOTION_TOKEN') });
 const databaseId = requiredEnvironment('NOTION_DATABASE_ID');
+const dataSourceId = await resolveDataSourceId(client, databaseId);
 const store = createStore();
 const previousManifest = await loadPreviousManifest();
 const previousByKey = new Map(previousManifest.images.map((image) => [image.key, image]));
-const previousByPage = new Map(
+const previousByIdentity = new Map(
   previousManifest.images
     .slice()
     .sort((a, b) => a.lastEditedTime.localeCompare(b.lastEditedTime))
-    .map((image) => [image.pageId, image]),
+    .map((image) => [imageIdentity(image), image]),
 );
 const stagingDirectory = `${assetsDirectory}.staging-${crypto.randomUUID()}`;
 
-await fs.mkdir(stagingDirectory, { recursive: true });
+await fs.mkdir(path.join(stagingDirectory, 'covers'), { recursive: true });
+await fs.mkdir(path.join(stagingDirectory, 'body'), { recursive: true });
 await fs.writeFile(path.join(stagingDirectory, '.gitkeep'), '');
 try {
-  const pages = await getPublishedPages(client, databaseId);
-  const images = await mapWithConcurrency(pages, concurrency, async (page) => {
+  const pages = await getPublishedPages(client, dataSourceId);
+  const pageImageGroups = await mapWithConcurrency(pages, concurrency, (page) => getPageImages(client, page));
+  const imagesToSync = pageImageGroups.flat();
+  const images = await mapWithConcurrency(imagesToSync, concurrency, async (image) => {
     try {
-      return await syncPageImage({ client, store, page, previousByKey, stagingDirectory });
+      return await syncImage({ image, store, previousByKey, stagingDirectory });
     } catch (error) {
-      const fallback = previousByPage.get(page.id);
-      if (!fallback || !await copyIfPresent(path.join(assetsDirectory, fallback.fileName), path.join(stagingDirectory, fallback.fileName))) {
+      const fallback = previousByIdentity.get(imageIdentity(image));
+      const fallbackPath = fallback && path.join(assetsDirectory, fallback.fileName);
+      if (!fallback || !fallbackPath || !await copyIfPresent(fallbackPath, path.join(stagingDirectory, fallback.fileName))) {
         throw error;
       }
-      console.warn(`Using the previous cover for ${page.id} because the current image could not be prepared.`);
+      console.warn(`Using the previous ${image.kind} image for ${image.pageId} because the current image could not be prepared.`);
       return {
-        key: imageKey(page.id, page.last_edited_time),
-        pageId: page.id,
-        lastEditedTime: page.last_edited_time,
+        ...image,
+        key: imageKey(image),
         fileName: fallback.fileName,
         blobKey: fallback.blobKey,
         stale: true,
       };
     }
   });
-  const manifest = { version: 1, generatedAt: new Date().toISOString(), images };
+  const covers = images.filter((image) => image.kind === 'cover');
+  const bodyImages = images.filter((image) => image.kind === 'body');
+  const manifest = { version: 2, generatedAt: new Date().toISOString(), images };
   const temporaryManifestPath = `${manifestPath}.staging-${crypto.randomUUID()}`;
-  const temporaryAssetModulePath = `${assetModulePath}.staging-${crypto.randomUUID()}`;
+  const temporaryCoverModulePath = `${coverAssetModulePath}.staging-${crypto.randomUUID()}`;
+  const temporaryBodyModulePath = `${bodyAssetModulePath}.staging-${crypto.randomUUID()}`;
   await fs.mkdir(path.dirname(manifestPath), { recursive: true });
   await fs.writeFile(temporaryManifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  await fs.writeFile(temporaryAssetModulePath, renderAssetModule(images));
+  await fs.writeFile(temporaryCoverModulePath, renderAssetModule(covers, 'notionImageAssets'));
+  await fs.writeFile(temporaryBodyModulePath, renderAssetModule(bodyImages, 'notionBodyImageAssets'));
   await replaceDirectory(stagingDirectory);
+  await fs.rename(temporaryCoverModulePath, coverAssetModulePath);
+  await fs.rename(temporaryBodyModulePath, bodyAssetModulePath);
   await fs.rename(temporaryManifestPath, manifestPath);
-  await fs.rename(temporaryAssetModulePath, assetModulePath);
   await pruneOldBlobVersions(store, images, previousManifest.images);
-  console.log(`Notion image sync complete: ${images.length} published cover images prepared.`);
+  console.log(`Notion image sync complete: ${covers.length} cover and ${bodyImages.length} body images prepared.`);
 } catch (error) {
   await fs.rm(stagingDirectory, { recursive: true, force: true });
   throw error;
