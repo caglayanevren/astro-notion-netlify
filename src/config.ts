@@ -1,8 +1,6 @@
 import type { RenderResult } from 'astro:content';
 import { getCollection } from 'astro:content';
 
-export const imageSavePath = "assets/notion";
-
 export type NotionPostItem = Awaited<ReturnType<typeof getCollection<'blog'>>>[number];
 
 export type BlogPostDataType = {

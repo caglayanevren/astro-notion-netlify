@@ -1,8 +1,40 @@
 import type { Loader } from 'astro/loaders';
 import { notionLoader, type NotionLoaderOptions } from '@astro-notion/loader';
+import imageManifest from '../assets/notion-image-manifest.json';
+import { rehypeManagedNotionImages } from './rehype-managed-notion-images';
+
+type ManagedImage = {
+    kind?: 'cover' | 'body';
+    pageId: string;
+    sourceType?: 'file' | 'external';
+    sourceUrlKey?: string;
+    fileName: string;
+};
+
+const manifest = imageManifest as { images: ManagedImage[] };
+const externalBodyImages = manifest.images.filter(
+    (image): image is ManagedImage & { kind: 'body'; sourceType: 'external'; sourceUrlKey: string } =>
+        image.kind === 'body'
+        && image.sourceType === 'external'
+        && typeof image.sourceUrlKey === 'string',
+);
+
+function bodyAssetImportPaths(pageId: string): string[] {
+    return externalBodyImages
+        .filter((image) => image.pageId === pageId)
+        .map((image) => `../../assets/notion-generated/${image.fileName.replaceAll('\\', '/')}`);
+}
 
 export function astroNotionLoaderPatch(options: NotionLoaderOptions): Loader {
-    const loader = notionLoader(options);
+    const rehypePlugins = [
+        ...(options.rehypePlugins ?? []),
+        [rehypeManagedNotionImages, externalBodyImages],
+    ];
+    const loader = notionLoader({
+        ...options,
+        imageSavePath: 'assets/notion-generated/body',
+        rehypePlugins: rehypePlugins as NotionLoaderOptions['rehypePlugins'],
+    });
     const schema = (loader as any).schema;
 
     if (typeof schema !== 'function') {
@@ -49,6 +81,16 @@ export function astroNotionLoaderPatch(options: NotionLoaderOptions): Loader {
                             ...entry.data,
                             last_edited_time: entry.digest,
                         },
+                    };
+                }
+
+                if (entry?.id && entry?.rendered) {
+                    entry = {
+                        ...entry,
+                        assetImports: [...new Set([
+                            ...(entry.assetImports ?? []),
+                            ...bodyAssetImportPaths(entry.id),
+                        ])],
                     };
                 }
 

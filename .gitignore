@@ -34,3 +34,4 @@ src/assets/notion-generated/*
 !src/assets/notion-generated/.gitkeep
 src/assets/notion-image-manifest.json
 src/assets/notion-image-assets.ts
+src/assets/notion-body-image-assets.ts

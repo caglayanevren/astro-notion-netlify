@@ -1,14 +1,12 @@
 import { defineCollection, z } from 'astro:content';
 //import { notionLoader } from '@astro-notion/loader';
 import { notionPageSchema, propertySchema, transformedPropertySchema } from '@astro-notion/loader/schemas';
-import { imageSavePath } from './config';
 import { astroNotionLoaderPatch } from '@utils/astronotionloaderpatch';
 
 const blog = defineCollection({
     loader: astroNotionLoaderPatch({
         auth: import.meta.env.NOTION_TOKEN,
         database_id: import.meta.env.NOTION_DATABASE_ID,
-        imageSavePath: imageSavePath, // burası body'deki image için otomatik çalışıyor, ancak properties'deki Image objectteki url'i kendim kaydettim -> bkz. downloadNotionImageToAssets()
         // Use Notion sorting and filtering
         filter: {
             property: 'Status',
