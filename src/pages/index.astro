@@ -1,7 +1,8 @@
 ---
 export const prerender = true;
 
-import ImageWrapper  from '@components/misc/ImageWrapper.astro';
+import ImageWrapper  from '@components/ImageWrapper.astro';
+import MainHeading  from '@components/mainHeading.astro';
 import  Layout from "@layouts/Layout.astro";
 import { getNotionPosts } from '@utils/notion';
 import { type BlogPostDataType } from '../config';
@@ -18,7 +19,7 @@ const filteredPosts = allPosts.filter(post => post.data.Status === 'Published');
   });
 ---
 <Layout>
-	<h1>Blog Yazıları</h1>
+	<MainHeading>Blog Main Heading</MainHeading>
 	<ul style="list-style-type: none;">
 	  {sortedPosts.map(post => (
 		<li>
