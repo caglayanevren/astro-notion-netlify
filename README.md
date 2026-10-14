@@ -1,5 +1,7 @@
 [![Netlify Status](https://api.netlify.com/api/v1/badges/74c5e223-599c-4c59-8f3c-6717ff704ae5/deploy-status)](https://app.netlify.com/projects/lovely-hamster-bf53e1/deploys)
 
+
+
 # Notion destekli Astro blogu
 
 ## Blogu kullanma
