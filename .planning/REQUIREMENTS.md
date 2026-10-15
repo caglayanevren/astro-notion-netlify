@@ -66,4 +66,18 @@
 
 | REQ-ID | Phase | Notes |
 |--------|-------|-------|
-| *(pending roadmap)* | | |
+| TEST-01 | Phase 1 | Vitest configured; `npm run test` runs unit + integration suites |
+| TEST-02 | Phase 1 | Unit tests: Notion property mapping, URL parsing, manifest lookup |
+| TEST-03 | Phase 1 | Integration: mocked Notion client → fetch → transform → `PostsType` |
+| TEST-04 | Phase 1 | No live Notion API calls, no real secrets — mocks/fixtures only |
+| HOOK-01 | Phase 2 | Auth without query-string secret; webhook reconfigured once |
+| HOOK-02 | Phase 2 | GET returns 405, no side effect |
+| HOOK-03 | Phase 2 | POST triggers Netlify hook; failure status codes tested |
+| HOOK-04 | Phase 2 | End-to-end checklist/script: Notion post → live site |
+| BUILD-01 | Phase 3 | Image sync failure modes deterministic/observable; blob-cache unavailability handled |
+| BUILD-02 | Phase 3 | Manifest-driven, size-bounded image downloads; documented |
+| ARCH-01 | Phase 3 | SSR → prerender/hybrid go/no-go with evidence; `/api/update` verified in chosen mode |
+| DOC-01 | Phase 4 | `SCHEMA-CHANGE.md` step-by-step guide |
+| DOC-02 | Phase 4 | Guide validated by `category` walkthrough test |
+
+*v2 requirements (CI-01, E2E-01, COV-01) are intentionally unmapped — deferred to the next milestone.*
